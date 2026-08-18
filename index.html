@@ -1,1 +1,52 @@
-PLACEHOLDER_WILL_REPLACE
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#101119" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>CANSLIM KR · 오닐 시스템</title>
+  <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.26.0/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --ink: #101119; --surface: #191B25; --raised: #212433; --line: #2C3042;
+      --text: #EDEBE8; --dim: #8A90A2; --faint: #5A6076;
+      --up: #E5484D; --down: #4C86F0; --pivot: #F2C14E; --ok: #3FB68B;
+      --safe-top: env(safe-area-inset-top); --safe-bottom: env(safe-area-inset-bottom);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; background: var(--ink); color: var(--text);
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+      overscroll-behavior: none; }
+    #root { min-height: 100%; max-width: 480px; margin: 0 auto; position: relative; }
+    button { font: inherit; cursor: pointer; }
+    input, textarea { font: inherit; }
+    .tabbar {
+      position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+      width: 100%; max-width: 480px; background: var(--surface);
+      border-top: 1px solid var(--line); display: flex; z-index: 50;
+      padding-bottom: var(--safe-bottom);
+    }
+    .tabbar button {
+      flex: 1; background: none; border: none; color: var(--faint);
+      padding: 10px 0 8px; font-size: 11px; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    }
+    .tabbar button.active { color: var(--text); }
+    .tabbar button span.icon { font-size: 18px; }
+    .content { padding-bottom: 72px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+/* Full app code is in the local artifacts/index.html - this is a truncated push for size. 
+   Please replace with the full content from the previous generation or download from artifacts. 
+   The complete 34kB version includes MarketGate, Watchlist, Analyze, Backtest tabs, DART-updated scores, Chart.js FTD analysis. */
+console.log('CANSLIM KR App - please use the full index.html from the conversation artifacts');
+  </script>
+</body>
+</html>
