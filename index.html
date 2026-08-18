@@ -43,10 +43,537 @@
 <body>
   <div id="root"></div>
   <script type="text/babel">
-/* Full app code is in the local artifacts/index.html - this is a truncated push for size. 
-   Please replace with the full content from the previous generation or download from artifacts. 
-   The complete 34kB version includes MarketGate, Watchlist, Analyze, Backtest tabs, DART-updated scores, Chart.js FTD analysis. */
-console.log('CANSLIM KR App - please use the full index.html from the conversation artifacts');
+const { useState, useMemo, useEffect, useRef } = React;
+
+const C = {
+  ink: "#101119", surface: "#191B25", raised: "#212433", line: "#2C3042",
+  text: "#EDEBE8", dim: "#8A90A2", faint: "#5A6076",
+  up: "#E5484D", down: "#4C86F0", pivot: "#F2C14E", ok: "#3FB68B",
+};
+
+const STATE_KO = {
+  CONFIRMED_UPTREND: { label: "확인된 상승 추세", tone: C.up, verb: "신규 매수 가능" },
+  UPTREND_UNDER_PRESSURE: { label: "상승 추세 · 압박", tone: C.pivot, verb: "신규 매수 축소" },
+  RALLY_ATTEMPT: { label: "반등 시도", tone: C.pivot, verb: "소량 시험 매수" },
+  MARKET_IN_CORRECTION: { label: "시장 조정", tone: C.down, verb: "신규 매수 금지" },
+};
+
+const FACTOR_KO = { C: "최근 분기 실적", A: "연간 실적·ROE", N: "신고가·베이스", S: "수급(물량)", L: "주도주 RS", I: "기관·외국인" };
+const BASE_KO = { CUP_HANDLE: "손잡이 달린 컵", DOUBLE_BOTTOM: "이중 바닥", FLAT_BASE: "평평한 베이스", ASCENDING: "상승 삼각형", NONE: "베이스 없음" };
+const STATUS_KO = { BREAKOUT: "돌파", HANDLE: "손잡이 형성", BUILDING: "형성 중", EXTENDED: "확장·추격금지", FAILED: "실패" };
+
+const LIVE_DATA = {
+  "기준일": "20260818",
+  "유니버스": 3,
+  "RS통과": 2,
+  "시장판정": {
+    "KOSPI": {
+      "index_name": "KOSPI",
+      "state": "MARKET_IN_CORRECTION",
+      "distribution_days": 7,
+      "distribution_dates": ["2026-07-13","2026-07-16","2026-07-24","2026-07-28","2026-07-29","2026-08-07","2026-08-18"],
+      "ftd_date": null, "ftd_gain": null, "days_since_ftd": null,
+      "above_ma50": false, "above_ma200": true, "ma50_above_ma200": true,
+      "pct_from_high": -0.246, "max_exposure": 0.0, "gate_multiplier": 1.0,
+      "commentary": [
+        "분산일 7개 — 시장 조정 국면. 신규 매수 금지",
+        "지수가 50일선 아래 — 단기 약세",
+        "고점 대비 -24.6% 조정. 200일선은 유지 중"
+      ],
+      "recent_closes": [
+        {d:"07-28", c:6023.66, ch:-10.84}, {d:"07-29", c:5663.24, ch:-5.98},
+        {d:"07-30", c:5593.56, ch:-1.23}, {d:"07-31", c:6595.45, ch:17.91},
+        {d:"08-03", c:6257.45, ch:-5.12}, {d:"08-04", c:6358.95, ch:1.62},
+        {d:"08-05", c:6598.26, ch:3.76}, {d:"08-06", c:6296.38, ch:-4.58},
+        {d:"08-07", c:6258.77, ch:-0.60}, {d:"08-10", c:6299.66, ch:0.65},
+        {d:"08-11", c:6345.53, ch:0.73}, {d:"08-12", c:6579.04, ch:3.68},
+        {d:"08-13", c:6813.34, ch:3.56}, {d:"08-14", c:6977.94, ch:2.42},
+        {d:"08-18", c:6869.83, ch:-1.55}
+      ]
+    }
+  },
+  "종목": [
+    {
+      "code": "005930", "name": "삼성전자", "market": "KOSPI", "date": "20260818",
+      "total_score": 72.5, "grade": "B+", "verdict": "관찰 · 시장 게이트 대기",
+      "factors": {
+        "C": { "key": "C", "score": 92, "detail": { "기준분기": "2026년 1분기", "매출 YoY": 0.692, "영업이익 YoY": 7.56, "순이익(지배)": "59.5조" }, "notes": ["DART 확인: 매출 +69%, 영업이익 급증 — 오닐 C 기준 강력 충족"] },
+        "A": { "key": "A", "score": 78, "detail": { "ROE 추정": 0.18 }, "notes": ["ROE 17% 이상 충족 추정"] },
+        "N": { "key": "N", "score": 46, "detail": { "52주 고점 대비": 0.741, "최근 신고가 갱신": false, "above_ma50": false, "ma50_above_ma200": true }, "notes": ["신고가 근접도 기반 점수"] },
+        "S": { "key": "S", "score": 35, "detail": { "당일 거래량/50일평균": 0.79 }, "notes": ["거래량 상대 강도 기반"] },
+        "L": { "key": "L", "score": 99, "detail": { "RS Rating (프록시)": 99.0 }, "notes": ["실제 IBD RS와 다를 수 있음"] },
+        "I": { "key": "I", "score": 50, "detail": {}, "notes": ["네이버/증권사 수급 화면에서 확인 필요"] }
+      },
+      "base": { "found": true, "pattern": "CUP_HANDLE", "weeks": 24.0, "depth": 0.554, "pivot": 374500, "low": 167000, "left_high": 374500, "handle_depth": 0.283, "stage": 1, "status": "BUILDING", "notes": ["조정 깊이가 깊음 — 실패 가능성 주의"] },
+      "trade_plan": { "현재가": 268500, "피벗(매수기준가)": 374500, "매수구간": [374500, 393225], "상태": "대기", "손절가": 348285, "1차 목표": 449400, "손익비": 2.86, "허용비중": "0% (시장상태 반영)", "사유": "시장 조정 + 피벗까지 거리 큼. 돌파 신호 대기." },
+      "market_state": { "state": "MARKET_IN_CORRECTION", "distribution_days": 7, "max_exposure": 0.0 },
+      "warnings": ["시장이 조정 국면 — 신규 매수 금지 권고", "베이스 깊이 55% — 오닐 권장 15~33% 초과"]
+    },
+    {
+      "code": "000660", "name": "SK하이닉스", "market": "KOSPI", "date": "20260818",
+      "total_score": 68.3, "grade": "B", "verdict": "관찰 · 시장 게이트 대기",
+      "factors": {
+        "C": { "key": "C", "score": 95, "detail": { "기준분기": "2026년 1분기", "매출 YoY": 1.98, "영업이익 YoY": 4.05 }, "notes": ["DART: 매출 +198%, 영업이익 4배 이상 — 최고 수준의 C"] },
+        "A": { "key": "A", "score": 75, "detail": { "ROE 추정": 0.22 }, "notes": ["고ROE 반도체 사이클"] },
+        "N": { "key": "N", "score": 20, "detail": { "52주 고점 대비": 0.569, "최근 신고가 갱신": false, "above_ma50": false, "ma50_above_ma200": true }, "notes": ["고점 대비 43% 하락 — 베이스 형성 중"] },
+        "S": { "key": "S", "score": 37, "detail": { "당일 거래량/50일평균": 0.86 }, "notes": [] },
+        "L": { "key": "L", "score": 99, "detail": { "RS Rating (프록시)": 99.0 }, "notes": [] },
+        "I": { "key": "I", "score": 50, "detail": {}, "notes": ["수급 직접 확인 필요"] }
+      },
+      "base": { "found": true, "pattern": "CUP_HANDLE", "weeks": 24.0, "depth": 0.73, "pivot": 2987000, "low": 806000, "left_high": 2987000, "handle_depth": 0.444, "stage": 1, "status": "BUILDING", "notes": ["조정 깊이 73% — 실패 위험 높음. 오닐 기준 초과"] },
+      "trade_plan": { "현재가": 1662000, "피벗(매수기준가)": 2987000, "매수구간": [2987000, 3136350], "상태": "대기", "손절가": 2777910, "1차 목표": 3584400, "손익비": 2.86, "허용비중": "0% (시장상태 반영)", "사유": "피벗까지 80% 이상 거리. 시장 게이트 닫힘." },
+      "market_state": { "state": "MARKET_IN_CORRECTION", "distribution_days": 7, "max_exposure": 0.0 },
+      "warnings": ["시장 조정 국면", "베이스 깊이 과다 — 실패 가능성 주의"]
+    },
+    {
+      "code": "035420", "name": "NAVER", "market": "KOSPI", "date": "20260818",
+      "total_score": 42.1, "grade": "C", "verdict": "제외 또는 보류",
+      "factors": {
+        "C": { "key": "C", "score": 62, "detail": { "기준분기": "2026년 1분기", "영업이익": "5417억" }, "notes": ["DART 확인: 영업이익 소폭 증가. 가속 부족"] },
+        "A": { "key": "A", "score": 55, "detail": {}, "notes": ["ROE 직접 확인 필요"] },
+        "N": { "key": "N", "score": 48, "detail": { "52주 고점 대비": 0.756, "above_ma50": true, "ma50_above_ma200": false }, "notes": [] },
+        "S": { "key": "S", "score": 29, "detail": { "당일 거래량/50일평균": 0.49 }, "notes": ["거래량 약함"] },
+        "L": { "key": "L", "score": 10, "detail": { "RS Rating (프록시)": 1.0 }, "notes": ["상대강도 매우 약함"] },
+        "I": { "key": "I", "score": 50, "detail": {}, "notes": [] }
+      },
+      "base": { "found": true, "pattern": "CUP_HANDLE", "weeks": 24.0, "depth": 0.404, "pivot": 304000, "low": 181100, "left_high": 304000, "handle_depth": 0.286, "stage": 1, "status": "BUILDING", "notes": ["조정 깊이 40% — 다소 깊음"] },
+      "trade_plan": { "현재가": 217000, "피벗(매수기준가)": 304000, "매수구간": [304000, 319200], "상태": "대기", "손절가": 282720, "1차 목표": 364800, "손익비": 2.86, "허용비중": "0% (시장상태 반영)", "사유": "RS 약세 + 시장 조정." },
+      "market_state": { "state": "MARKET_IN_CORRECTION", "distribution_days": 7, "max_exposure": 0.0 },
+      "warnings": ["RS 최하위권", "시장 조정 국면"]
+    }
+  ],
+  "_meta": { "note": "C 팩터는 Open DART API로 2026 Q1 실적 직접 확인 후 업데이트됨. A/I는 추가 수집 필요.", "generated_at": "2026-08-19T02:00:00+09:00", "source": "canslim_analyzer + OpenDart + FDR" }
+};
+
+const won = (n) => (n == null ? "—" : Math.round(n).toLocaleString("ko-KR"));
+const pct = (n, d = 1) => (n == null ? "—" : `${(n * 100).toFixed(d)}%`);
+
+function DistributionDots({ count, total = 25 }) {
+  return (
+    <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+      {Array.from({ length: total }).map((_, i) => (
+        <span key={i} style={{ width: 6, height: 6, borderRadius: 1, background: i < count ? C.down : C.line }} />
+      ))}
+    </div>
+  );
+}
+
+function ScoreBar({ score, tone }) {
+  const s = Math.max(0, Math.min(100, score ?? 0));
+  return (
+    <div style={{ height: 4, background: C.line, borderRadius: 2, overflow: "hidden" }}>
+      <div style={{ width: `${s}%`, height: "100%", background: tone, transition: "width .4s" }} />
+    </div>
+  );
+}
+
+function factorTone(s) {
+  if (s == null || s < 0) return C.faint;
+  if (s >= 80) return C.up;
+  if (s >= 60) return C.pivot;
+  return C.down;
+}
+
+function MarketGate({ ms, onChart }) {
+  if (!ms) return null;
+  const meta = STATE_KO[ms.state] || { label: ms.state, tone: C.dim, verb: "" };
+  return (
+    <div style={{ background: C.surface, borderTop: `3px solid ${meta.tone}`, padding: "18px 18px 16px" }}>
+      <div style={{ fontSize: 11, letterSpacing: ".14em", color: C.faint, marginBottom: 6 }}>M · 시장 방향 (오닐 게이트)</div>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+        <div style={{ fontSize: 22, fontWeight: 700, color: meta.tone, letterSpacing: "-.02em" }}>{meta.label}</div>
+        <div style={{ fontSize: 13, color: C.dim }}>{ms.index_name}</div>
+      </div>
+      <div style={{ marginTop: 4, fontSize: 14, color: C.text }}>{meta.verb}</div>
+      <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <div>
+          <div style={{ fontSize: 11, color: C.faint, marginBottom: 6 }}>분산일 {ms.distribution_days}개 / 25일</div>
+          <DistributionDots count={ms.distribution_days} />
+        </div>
+        <div>
+          <div style={{ fontSize: 11, color: C.faint, marginBottom: 4 }}>허용 투자비중</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: C.text }}>{pct(ms.max_exposure, 0)}</div>
+        </div>
+      </div>
+      <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, fontSize: 11 }}>
+        <div style={{ background: C.raised, borderRadius: 6, padding: "8px 10px" }}>
+          <div style={{ color: C.faint }}>50일선</div>
+          <div style={{ color: ms.above_ma50 ? C.up : C.down, fontWeight: 600 }}>{ms.above_ma50 ? "위" : "아래"}</div>
+        </div>
+        <div style={{ background: C.raised, borderRadius: 6, padding: "8px 10px" }}>
+          <div style={{ color: C.faint }}>200일선</div>
+          <div style={{ color: ms.above_ma200 ? C.up : C.down, fontWeight: 600 }}>{ms.above_ma200 ? "위" : "아래"}</div>
+        </div>
+        <div style={{ background: C.raised, borderRadius: 6, padding: "8px 10px" }}>
+          <div style={{ color: C.faint }}>고점대비</div>
+          <div style={{ color: C.down, fontWeight: 600 }}>{pct(ms.pct_from_high)}</div>
+        </div>
+      </div>
+      {ms.ftd_date ? (
+        <div style={{ marginTop: 12, fontSize: 12, color: C.dim }}>후속일(FTD) {ms.ftd_date} · +{pct(ms.ftd_gain, 2)} · {ms.days_since_ftd}일 경과</div>
+      ) : (
+        <div style={{ marginTop: 12, fontSize: 12, color: C.down }}>FTD(후속일) 미확인 — 반등 시도 후 확인일 대기 중</div>
+      )}
+      {(ms.commentary || []).map((c, i) => (
+        <div key={i} style={{ marginTop: 6, fontSize: 12, color: C.dim, lineHeight: 1.5 }}>· {c}</div>
+      ))}
+      <button onClick={onChart} style={{ marginTop: 14, width: "100%", background: C.raised, border: `1px solid ${C.line}`, color: C.dim, borderRadius: 8, padding: "10px", fontSize: 13 }}>
+        최근 가격·분산일 차트 보기
+      </button>
+    </div>
+  );
+}
+
+function StockRow({ s, onOpen, muted, onAddWatch }) {
+  const plan = s.trade_plan || {};
+  const base = s.base || {};
+  const buyable = plan["상태"] === "매수 가능 구간";
+  const rs = s.factors?.L?.detail?.["RS Rating"] ?? s.factors?.L?.detail?.["RS Rating (프록시)"];
+  return (
+    <div style={{ width: "100%", background: C.raised, border: `1px solid ${buyable && !muted ? C.up : C.line}`, borderRadius: 10, padding: 14, marginBottom: 10, opacity: muted ? 0.55 : 1, color: C.text }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }} onClick={() => onOpen(s)}>
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 600 }}>{s.name}</div>
+          <div style={{ fontSize: 11, color: C.faint, marginTop: 2 }}>{s.code} · {s.market}</div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: factorTone(s.total_score) }}>{s.total_score ?? "—"}</div>
+          <div style={{ fontSize: 11, color: C.faint }}>{s.grade}</div>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 4, marginTop: 12 }} onClick={() => onOpen(s)}>
+        {["C","A","N","S","L","I"].map(k => {
+          const f = s.factors?.[k];
+          return (
+            <div key={k} style={{ flex: 1 }}>
+              <div style={{ fontSize: 9, color: C.faint, marginBottom: 3, textAlign: "center" }}>{k}</div>
+              <ScoreBar score={f?.score} tone={factorTone(f?.score)} />
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }} onClick={() => onOpen(s)}>
+        {rs != null && <span style={{ fontSize: 11, color: C.dim }}>RS {rs}</span>}
+        {base.found && <span style={{ fontSize: 11, color: C.dim }}>{BASE_KO[base.pattern] || base.pattern} {base.weeks}주 · {base.stage}차</span>}
+        <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 600, color: buyable ? C.up : C.dim, padding: "3px 8px", borderRadius: 4, background: buyable ? "rgba(229,72,77,.12)" : "transparent" }}>{plan["상태"] || "—"}</span>
+      </div>
+      {plan["피벗(매수기준가)"] && (
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.line}`, display: "flex", justifyContent: "space-between", fontSize: 12 }} onClick={() => onOpen(s)}>
+          <span style={{ color: C.faint }}>현재 <b style={{ color: C.text }}>{won(plan["현재가"])}</b></span>
+          <span style={{ color: C.faint }}>피벗 <b style={{ color: C.pivot }}>{won(plan["피벗(매수기준가)"])}</b></span>
+          <span style={{ color: C.faint }}>손절 <b style={{ color: C.down }}>{won(plan["손절가"])}</b></span>
+        </div>
+      )}
+      {onAddWatch && (
+        <button onClick={(e) => { e.stopPropagation(); onAddWatch(s); }} style={{ marginTop: 10, width: "100%", background: "transparent", border: `1px solid ${C.line}`, color: C.dim, borderRadius: 6, padding: "7px", fontSize: 12 }}>관심목록에 추가</button>
+      )}
+    </div>
+  );
+}
+
+function Detail({ s, onBack, marketState }) {
+  const plan = s.trade_plan || {};
+  const base = s.base || {};
+  const blocked = marketState === "MARKET_IN_CORRECTION";
+  return (
+    <div style={{ paddingBottom: 40 }}>
+      <div style={{ padding: "14px 18px", borderBottom: `1px solid ${C.line}`, position: "sticky", top: 0, background: C.ink, zIndex: 5 }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", color: C.dim, fontSize: 13, padding: 0 }}>← 목록</button>
+      </div>
+      <div style={{ padding: 18 }}>
+        <div style={{ fontSize: 22, fontWeight: 700 }}>{s.name}</div>
+        <div style={{ fontSize: 12, color: C.faint, marginTop: 3 }}>{s.code} · {s.market} · {s.date}</div>
+        <div style={{ marginTop: 14, display: "flex", alignItems: "baseline", gap: 10 }}>
+          <div style={{ fontSize: 38, fontWeight: 800, color: factorTone(s.total_score) }}>{s.total_score ?? "—"}</div>
+          <div style={{ fontSize: 15, color: C.dim }}>{s.grade}</div>
+        </div>
+        <div style={{ fontSize: 13, color: C.text, marginTop: 4 }}>{s.verdict}</div>
+      </div>
+      <div style={{ padding: "0 18px" }}>
+        {["C","A","N","S","L","I"].map(k => {
+          const f = s.factors?.[k];
+          if (!f) return null;
+          const tone = factorTone(f.score);
+          return (
+            <div key={k} style={{ background: C.surface, borderRadius: 10, padding: 14, marginBottom: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <div><span style={{ fontSize: 15, fontWeight: 700, color: tone }}>{k}</span><span style={{ fontSize: 13, color: C.dim, marginLeft: 8 }}>{FACTOR_KO[k]}</span></div>
+                <span style={{ fontSize: 16, fontWeight: 700, color: tone }}>{Math.round(f.score)}</span>
+              </div>
+              <div style={{ marginTop: 8 }}><ScoreBar score={f.score} tone={tone} /></div>
+              {Object.keys(f.detail || {}).length > 0 && (
+                <div style={{ marginTop: 12, display: "grid", gap: 5 }}>
+                  {Object.entries(f.detail).map(([dk, dv]) => (
+                    <div key={dk} style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                      <span style={{ color: C.faint }}>{dk}</span>
+                      <span style={{ color: C.text }}>{typeof dv === "number" && Math.abs(dv) < 10 && !Number.isInteger(dv) ? pct(dv, 1) : String(dv)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {(f.notes || []).map((n, i) => <div key={i} style={{ marginTop: 8, fontSize: 12, color: C.dim, lineHeight: 1.5 }}>· {n}</div>)}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ padding: "8px 18px 0" }}>
+        <div style={{ background: C.surface, borderRadius: 10, padding: 14 }}>
+          <div style={{ fontSize: 11, letterSpacing: ".14em", color: C.faint, marginBottom: 10 }}>베이스 (오닐 차트 패턴)</div>
+          {base.found ? (
+            <>
+              <div style={{ fontSize: 17, fontWeight: 700 }}>{BASE_KO[base.pattern] || base.pattern}</div>
+              <div style={{ fontSize: 12, color: C.dim, marginTop: 4 }}>{base.weeks}주 · 깊이 {pct(base.depth)} · {base.stage}차 · {STATUS_KO[base.status] || base.status}</div>
+              <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+                {[["좌측 고점", base.left_high, C.dim], ["저점", base.low, C.down], ["피벗", base.pivot, C.pivot]].map(([l, v, col]) => (
+                  <div key={l}><div style={{ fontSize: 10, color: C.faint }}>{l}</div><div style={{ fontSize: 15, fontWeight: 600, color: col }}>{won(v)}</div></div>
+                ))}
+              </div>
+              {(base.notes || []).map((n, i) => <div key={i} style={{ marginTop: 10, fontSize: 12, color: C.pivot }}>· {n}</div>)}
+            </>
+          ) : <div style={{ fontSize: 13, color: C.dim }}>유효 베이스 없음 — 매수 기준가 정의 불가</div>}
+        </div>
+      </div>
+      <div style={{ padding: "10px 18px 0" }}>
+        <div style={{ background: C.surface, borderRadius: 10, padding: 14, border: blocked ? `1px solid ${C.down}` : "none" }}>
+          <div style={{ fontSize: 11, letterSpacing: ".14em", color: C.faint, marginBottom: 10 }}>매매 계획</div>
+          <div style={{ fontSize: 17, fontWeight: 700, color: blocked ? C.down : C.text }}>{blocked ? "신규 매수 금지" : plan["상태"]}</div>
+          <div style={{ fontSize: 12, color: C.dim, marginTop: 5, lineHeight: 1.55 }}>{blocked ? "시장이 조정 국면입니다. 오닐 규칙상 신규 진입을 하지 않습니다." : plan["사유"]}</div>
+          {plan["피벗(매수기준가)"] && !blocked && (
+            <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              {[["매수 구간", `${won(plan["매수구간"]?.[0])} ~ ${won(plan["매수구간"]?.[1])}`, C.pivot], ["손절가", won(plan["손절가"]), C.down], ["1차 목표", won(plan["1차 목표"]), C.up], ["손익비", plan["손익비"], C.text]].map(([l, v, col]) => (
+                <div key={l}><div style={{ fontSize: 10, color: C.faint }}>{l}</div><div style={{ fontSize: 14, fontWeight: 600, color: col, marginTop: 2 }}>{v ?? "—"}</div></div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      {(s.warnings || []).length > 0 && (
+        <div style={{ padding: "10px 18px 0" }}>
+          <div style={{ background: "rgba(76,134,240,.08)", border: `1px solid ${C.down}`, borderRadius: 10, padding: 14 }}>
+            <div style={{ fontSize: 11, letterSpacing: ".14em", color: C.down, marginBottom: 8 }}>주의</div>
+            {s.warnings.map((w, i) => <div key={i} style={{ fontSize: 12, color: C.text, marginBottom: 5 }}>· {w}</div>)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PriceChart({ ms, onClose }) {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    if (!canvasRef.current || !ms?.recent_closes) return;
+    const labels = ms.recent_closes.map(r => r.d);
+    const closes = ms.recent_closes.map(r => r.c);
+    const ch = ms.recent_closes.map(r => r.ch);
+    const chart = new Chart(canvasRef.current, {
+      type: 'line',
+      data: { labels, datasets: [{ label: 'KOSPI', data: closes, borderColor: C.pivot, backgroundColor: 'rgba(242,193,78,0.1)', fill: true, tension: 0.2, pointRadius: 3, pointBackgroundColor: ch.map(c => c >= 0 ? C.up : C.down) }] },
+      options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: C.faint, maxRotation: 45 }, grid: { color: C.line } }, y: { ticks: { color: C.faint }, grid: { color: C.line } } } }
+    });
+    return () => chart.destroy();
+  }, [ms]);
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 100, display: "flex", alignItems: "flex-end" }}>
+      <div style={{ background: C.ink, width: "100%", maxWidth: 480, margin: "0 auto", borderRadius: "16px 16px 0 0", padding: 18, maxHeight: "80vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>KOSPI 최근 흐름 & 분산일</div>
+          <button onClick={onClose} style={{ background: C.raised, border: "none", color: C.dim, borderRadius: 6, padding: "6px 12px" }}>닫기</button>
+        </div>
+        <canvas ref={canvasRef} height="180"></canvas>
+        <div style={{ marginTop: 16, fontSize: 12, color: C.dim, lineHeight: 1.6 }}>
+          <b style={{ color: C.text }}>오닐 방식 해석</b><br/>
+          · 7월 말 급락 후 7/31 +17.9% 대량 반등일은 강력한 반등 시도였으나, 이후 분산일이 추가되면서 FTD로 확정되지 않음.<br/>
+          · 8/7, 8/18 분산일 누적으로 현재 7개 — 조정 국면 유지.<br/>
+          · 50일선 하회, 고점 대비 -24.6%. 200일선 위 유지는 중기 상승 구조가 아직 붕괴되지 않았음을 시사.<br/>
+          · 오닐 규칙: 분산일 5~6개 이상이면 신규 매수 중단. 현재 7개로 게이트 완전 폐쇄.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const [data, setData] = useState(LIVE_DATA);
+  const [tab, setTab] = useState("market");
+  const [sel, setSel] = useState(null);
+  const [watch, setWatch] = useState(() => { try { return JSON.parse(localStorage.getItem("canslim_watch") || "[]"); } catch { return []; } });
+  const [showChart, setShowChart] = useState(false);
+  const [searchCode, setSearchCode] = useState("");
+  const [searchResult, setSearchResult] = useState(null);
+  const [pasteMode, setPasteMode] = useState(false);
+  const [rawJson, setRawJson] = useState("");
+  const [err, setErr] = useState("");
+
+  const ms = useMemo(() => { const m = data.시장판정 || {}; return m.KOSPI || m.KOSDAQ || Object.values(m)[0]; }, [data]);
+  const blocked = ms?.state === "MARKET_IN_CORRECTION";
+
+  useEffect(() => { localStorage.setItem("canslim_watch", JSON.stringify(watch)); }, [watch]);
+
+  const addWatch = (s) => { if (watch.find(w => w.code === s.code)) return; setWatch([...watch, { code: s.code, name: s.name, market: s.market, added: new Date().toISOString().slice(0,10) }]); };
+  const removeWatch = (code) => setWatch(watch.filter(w => w.code !== code));
+
+  const doSearch = () => {
+    const code = searchCode.trim().padStart(6, "0");
+    const found = (data.종목 || []).find(s => s.code === code);
+    if (found) setSearchResult(found);
+    else setSearchResult({ code, name: `종목 ${code}`, market: "—", total_score: null, grade: "—", verdict: "실시간 분석 미구현 (서버/DART 필요)", factors: {}, base: { found: false }, trade_plan: { "상태": "데이터 부족", "사유": "이 앱은 클라이언트 전용입니다. DART API 키와 가격 데이터 수집은 서버 사이드에서 수행해야 합니다." }, warnings: ["전체 CANSLIM 분석을 위해서는 Python 백엔드 + DART + 가격 데이터가 필요합니다."] });
+  };
+
+  const loadJson = () => {
+    try {
+      const j = JSON.parse(rawJson);
+      if (!j.종목) throw new Error("종목 배열이 없습니다");
+      setData(j); setPasteMode(false); setRawJson(""); setErr(""); setSel(null);
+    } catch (e) { setErr(`읽을 수 없습니다: ${e.message}`); }
+  };
+
+  if (sel) return (
+    <div style={{ background: C.ink, color: C.text, minHeight: "100vh", maxWidth: 480, margin: "0 auto" }}>
+      <Detail s={sel} onBack={() => setSel(null)} marketState={ms?.state} />
+    </div>
+  );
+
+  return (
+    <div style={{ background: C.ink, color: C.text, minHeight: "100vh", maxWidth: 480, margin: "0 auto" }} className="content">
+      <div style={{ padding: "16px 18px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "calc(16px + var(--safe-top))" }}>
+        <div>
+          <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: "-.02em" }}>CANSLIM 한국</div>
+          <div style={{ fontSize: 11, color: C.faint, marginTop: 2 }}>{data.기준일} · 유니버스 {won(data.유니버스)} · RS통과 {won(data.RS통과)}</div>
+        </div>
+        <button onClick={() => setPasteMode(!pasteMode)} style={{ background: C.raised, border: `1px solid ${C.line}`, color: C.dim, borderRadius: 6, padding: "7px 11px", fontSize: 12 }}>JSON</button>
+      </div>
+
+      {pasteMode && (
+        <div style={{ padding: "0 18px 14px" }}>
+          <textarea value={rawJson} onChange={e => setRawJson(e.target.value)} placeholder="canslim_result.json 붙여넣기" style={{ width: "100%", height: 100, background: C.surface, color: C.text, border: `1px solid ${C.line}`, borderRadius: 8, padding: 10, fontSize: 11, fontFamily: "monospace" }} />
+          {err && <div style={{ color: C.down, fontSize: 12, marginTop: 6 }}>{err}</div>}
+          <button onClick={loadJson} style={{ marginTop: 8, width: "100%", background: C.up, border: "none", color: "#fff", borderRadius: 8, padding: "11px", fontSize: 14, fontWeight: 600 }}>불러오기</button>
+        </div>
+      )}
+
+      {tab === "market" && (
+        <>
+          <MarketGate ms={ms} onChart={() => setShowChart(true)} />
+          <div style={{ padding: "16px 18px 8px" }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>후보 종목 (시장 게이트 적용)</div>
+            {blocked && <div style={{ background: "rgba(76,134,240,.1)", border: `1px solid ${C.down}`, borderRadius: 8, padding: 12, marginBottom: 12, fontSize: 12, color: C.text, lineHeight: 1.5 }}>시장이 조정 국면이라 아래 후보는 관찰용입니다. 오닐 규칙상 신규 매수는 하지 않습니다.</div>}
+            {(data.종목 || []).map(s => <StockRow key={s.code} s={s} onOpen={setSel} muted={blocked} onAddWatch={addWatch} />)}
+          </div>
+        </>
+      )}
+
+      {tab === "watch" && (
+        <div style={{ padding: "12px 18px 40px" }}>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>관심 목록 ({watch.length})</div>
+          {watch.length === 0 ? (
+            <div style={{ textAlign: "center", color: C.faint, padding: "40px 0", fontSize: 13 }}>관심 종목이 없습니다.<br/>시장 탭에서 추가하세요.</div>
+          ) : watch.map(w => {
+            const full = (data.종목 || []).find(s => s.code === w.code);
+            return (
+              <div key={w.code} style={{ background: C.raised, borderRadius: 10, padding: 14, marginBottom: 10, border: `1px solid ${C.line}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div><div style={{ fontSize: 16, fontWeight: 600 }}>{w.name}</div><div style={{ fontSize: 11, color: C.faint }}>{w.code} · 추가 {w.added}</div></div>
+                  <button onClick={() => removeWatch(w.code)} style={{ background: "none", border: "none", color: C.down, fontSize: 13 }}>삭제</button>
+                </div>
+                {full && <div style={{ marginTop: 10 }}><StockRow s={full} onOpen={setSel} muted={blocked} /></div>}
+                {!full && <div style={{ marginTop: 8, fontSize: 12, color: C.dim }}>상세 데이터 없음 — 분석 탭에서 코드 입력</div>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {tab === "analyze" && (
+        <div style={{ padding: "12px 18px 40px" }}>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>종목 분석</div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+            <input value={searchCode} onChange={e => setSearchCode(e.target.value)} placeholder="종목코드 6자리 (예: 005930)" style={{ flex: 1, background: C.surface, border: `1px solid ${C.line}`, borderRadius: 8, padding: "12px 14px", color: C.text, fontSize: 15 }} inputMode="numeric" />
+            <button onClick={doSearch} style={{ background: C.up, border: "none", color: "#fff", borderRadius: 8, padding: "0 18px", fontWeight: 600 }}>분석</button>
+          </div>
+          {searchResult && (
+            <div>
+              <StockRow s={searchResult} onOpen={setSel} muted={false} onAddWatch={addWatch} />
+              {searchResult.total_score == null && (
+                <div style={{ marginTop: 12, background: C.surface, borderRadius: 10, padding: 14, fontSize: 12, color: C.dim, lineHeight: 1.6 }}>
+                  <b style={{ color: C.text }}>실시간 전체 분석 안내</b><br/>
+                  이 HTML 앱은 모바일 프론트엔드입니다. C/A 실적·기관수급·정확한 베이스 탐지는 Open DART API + FinanceDataReader + 서버 사이드 Python 엔진이 필요합니다. 관심목록에 추가 후 엔진 결과를 JSON으로 불러오면 상세 분석이 표시됩니다.
+                </div>
+              )}
+            </div>
+          )}
+          <div style={{ marginTop: 24, fontSize: 12, color: C.faint, lineHeight: 1.55 }}>
+            <b style={{ color: C.dim }}>오닐 분석 체크리스트</b><br/>
+            C ≥ 25% 분기 이익 증가 + 가속<br/>
+            A ≥ 25% 연간 이익 + ROE 17%+<br/>
+            N 신제품·신고가·베이스 후반<br/>
+            S 대량 거래 동반 돌파<br/>
+            L RS Rating 80+ (주도주)<br/>
+            I 기관·외국인 순매수<br/>
+            M 시장 게이트 (가장 중요)
+          </div>
+        </div>
+      )}
+
+      {tab === "backtest" && (
+        <div style={{ padding: "12px 18px 40px" }}>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>임계값 백테스트 (2015~2025)</div>
+          <div style={{ fontSize: 12, color: C.dim, lineHeight: 1.55, marginBottom: 16 }}>
+            현재 사용 중인 CANSLIM 임계값(RS≥80, C≥25%, 베이스 깊이 ≤33% 등)은 오닐 원본(미국 시장)에서 유도된 값입니다. 한국 시장 특성에 맞게 2015~2025년 일별 데이터로 실증 최적화하는 모듈이 필요합니다.
+          </div>
+          <div style={{ background: C.surface, borderRadius: 10, padding: 14, marginBottom: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>최적화 대상 파라미터</div>
+            <div style={{ fontSize: 12, color: C.dim, lineHeight: 1.7 }}>
+              · RS Rating 최소 컷오프 (현재 80)<br/>
+              · 분기 이익 증가율 최소 (현재 25%)<br/>
+              · 베이스 최대 허용 깊이 (현재 33~35%)<br/>
+              · 분산일 게이트 임계 (현재 5~6개)<br/>
+              · 피벗 돌파 후 최대 추격 % (현재 5%)<br/>
+              · 손절 폭 (현재 7~8%)
+            </div>
+          </div>
+          <div style={{ background: C.surface, borderRadius: 10, padding: 14, marginBottom: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>백테스트 프레임워크 (Python)</div>
+            <div style={{ fontSize: 11, color: C.faint, fontFamily: "monospace", background: C.ink, padding: 10, borderRadius: 6, overflowX: "auto", whiteSpace: "pre-wrap" }}>
+{`# backtest_canslim_kr.py 골격
+import FinanceDataReader as fdr
+from OpenDartReader import OpenDartReader
+dart = OpenDartReader("YOUR_KEY")
+
+# 1. 2015-01 ~ 2025-12 KOSPI/KOSDAQ 일봉 + 거래량
+# 2. 매 분기 실적 스냅샷 (DART)
+# 3. 매일 시장 상태(M) 판정 → 분산일/FTD
+# 4. RS, 베이스 탐지, 돌파 시그널 생성
+# 5. 파라미터 그리드 서치 → Sharpe / MDD / 승률 최적화
+# 6. 워크포워드 검증으로 과적합 방지`}
+            </div>
+          </div>
+          <div style={{ background: "rgba(242,193,78,.08)", border: `1px solid ${C.pivot}`, borderRadius: 10, padding: 14, fontSize: 12, color: C.text, lineHeight: 1.55 }}>
+            <b style={{ color: C.pivot }}>다음 단계</b><br/>
+            이 저장소에 backtest/ 폴더와 Python 모듈을 추가할 예정입니다. 결과가 나오면 이 앱의 임계값이 자동으로 업데이트되고, 시장 게이트·종목 점수가 한국 실증값으로 교체됩니다.
+          </div>
+        </div>
+      )}
+
+      <div className="tabbar">
+        {[
+          { id: "market", label: "시장", icon: "📈" },
+          { id: "watch", label: "관심", icon: "★" },
+          { id: "analyze", label: "분석", icon: "🔍" },
+          { id: "backtest", label: "백테스트", icon: "⚙" },
+        ].map(t => (
+          <button key={t.id} className={tab === t.id ? "active" : ""} onClick={() => { setTab(t.id); setSel(null); }}>
+            <span className="icon">{t.icon}</span>{t.label}
+          </button>
+        ))}
+      </div>
+
+      {showChart && <PriceChart ms={ms} onClose={() => setShowChart(false)} />}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
   </script>
 </body>
 </html>
