@@ -1,1 +1,197 @@
-SEE_LOCAL_ARTIFACTS_FOR_FULL_CONTENT_DUE_TO_SIZE
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<meta name="theme-color" content="#101119"/>
+<title>CANSLIM KR</title>
+<script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.26.0/babel.min.js"></script>
+<style>
+:root{--ink:#101119;--s:#191B25;--r:#212433;--l:#2C3042;--t:#EDEBE8;--d:#8A90A2;--f:#5A6076;--up:#E5484D;--dn:#4C86F0;--pv:#F2C14E}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--ink);color:var(--t);font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif}
+#root{max-width:480px;margin:0 auto;min-height:100%}
+.tabbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:var(--s);border-top:1px solid var(--l);display:flex;z-index:50;padding-bottom:env(safe-area-inset-bottom)}
+.tabbar button{flex:1;background:none;border:none;color:var(--f);padding:10px 0 8px;font-size:11px;display:flex;flex-direction:column;align-items:center;gap:3px}
+.tabbar button.active{color:var(--t)}
+button{font:inherit;cursor:pointer}
+input{font:inherit}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useMemo,useEffect}=React;
+const C={ink:"#101119",s:"#191B25",r:"#212433",l:"#2C3042",t:"#EDEBE8",d:"#8A90A2",f:"#5A6076",up:"#E5484D",dn:"#4C86F0",pv:"#F2C14E"};
+const LIVE={
+기준일:"20260818",유니버스:3,RS통과:2,
+시장판정:{KOSPI:{index_name:"KOSPI",state:"MARKET_IN_CORRECTION",distribution_days:7,above_ma50:false,above_ma200:true,pct_from_high:-0.246,max_exposure:0,
+commentary:["분산일 7개 — 시장 조정 국면. 신규 매수 금지","지수가 50일선 아래 — 단기 약세","고점 대비 -24.6%"]}},
+종목:[
+{code:"005930",name:"삼성전자",market:"KOSPI",total_score:72.5,grade:"B+",verdict:"관찰 · 시장 게이트 대기",
+factors:{C:{score:92,notes:["DART: 매출 +69%"]},A:{score:78},N:{score:46},S:{score:35},L:{score:99},I:{score:50}},
+base:{found:true,pattern:"CUP_HANDLE",weeks:24,depth:0.554,pivot:374500,status:"BUILDING"},
+trade_plan:{"현재가":268500,"피벗(매수기준가)":374500,"상태":"대기","허용비중":"0%"},
+warnings:["시장 조정 국면"]},
+{code:"000660",name:"SK하이닉스",market:"KOSPI",total_score:68.3,grade:"B",verdict:"관찰 · 시장 게이트 대기",
+factors:{C:{score:95,notes:["DART: 매출 +198%"]},A:{score:75},N:{score:20},S:{score:37},L:{score:99},I:{score:50}},
+base:{found:true,pattern:"CUP_HANDLE",weeks:24,depth:0.73,pivot:2987000,status:"BUILDING"},
+trade_plan:{"현재가":1662000,"피벗(매수기준가)":2987000,"상태":"대기","허용비중":"0%"},
+warnings:["시장 조정 국면"]},
+{code:"035420",name:"NAVER",market:"KOSPI",total_score:42.1,grade:"C",verdict:"제외 또는 보류",
+factors:{C:{score:62},A:{score:55},N:{score:48},S:{score:29},L:{score:10},I:{score:50}},
+base:{found:true,pattern:"CUP_HANDLE",weeks:24,depth:0.404,pivot:304000,status:"BUILDING"},
+trade_plan:{"현재가":217000,"피벗(매수기준가)":304000,"상태":"대기","허용비중":"0%"},
+warnings:["RS 최하위권"]}
+]};
+const won=n=>n==null?"—":Math.round(n).toLocaleString("ko-KR");
+const pct=(n,d=1)=>n==null?"—":(n*100).toFixed(d)+"%";
+const tone=s=>s==null||s<0?C.f:s>=80?C.up:s>=60?C.pv:C.dn;
+
+function App(){
+  const [tab,setTab]=useState("analyze");
+  const [code,setCode]=useState("");
+  const [result,setResult]=useState(null);
+  const [msg,setMsg]=useState("");
+  const [watch,setWatch]=useState(()=>{try{return JSON.parse(localStorage.getItem("cw")||"[]")}catch{return[]}});
+  const [sel,setSel]=useState(null);
+  const ms=LIVE.시장판정.KOSPI;
+  const blocked=true;
+
+  useEffect(()=>{localStorage.setItem("cw",JSON.stringify(watch))},[watch]);
+
+  const add=(s)=>{if(watch.find(w=>w.code===s.code))return;setWatch(p=>[...p,{code:s.code,name:s.name,added:new Date().toISOString().slice(0,10)}])};
+  const remove=c=>setWatch(p=>p.filter(w=>w.code!==c));
+
+  const analyze=()=>{
+    const c=code.trim().padStart(6,"0");
+    if(c.length<6){setMsg("6자리 코드를 입력하세요");return}
+    const found=LIVE.종목.find(s=>s.code===c);
+    if(found){setResult(found);setMsg("분석 완료 · 관심목록에 추가됨");add(found)}
+    else{const stub={code:c,name:"종목 "+c,total_score:null,grade:"—",verdict:"엔진 데이터 없음",factors:{},base:{found:false},trade_plan:{"상태":"데이터 부족"},warnings:["미리 로드된 종목이 아닙니다"]};setResult(stub);setMsg("관심목록에 추가했습니다 (상세 데이터 없음)");add(stub)}
+  };
+
+  if(sel)return(
+    <div style={{padding:18,paddingBottom:80}}>
+      <button onClick={()=>setSel(null)} style={{background:"none",border:"none",color:C.d,marginBottom:12}}>← 목록</button>
+      <div style={{fontSize:22,fontWeight:700}}>{sel.name}</div>
+      <div style={{fontSize:12,color:C.f}}>{sel.code}</div>
+      <div style={{fontSize:36,fontWeight:800,color:tone(sel.total_score),marginTop:12}}>{sel.total_score??"—"} <span style={{fontSize:14,color:C.d}}>{sel.grade}</span></div>
+      <div style={{marginTop:8}}>{sel.verdict}</div>
+      {["C","A","N","S","L","I"].map(k=>{const f=sel.factors?.[k];if(!f)return null;return(
+        <div key={k} style={{background:C.s,borderRadius:10,padding:12,marginTop:10}}>
+          <div style={{display:"flex",justifyContent:"space-between"}}><b style={{color:tone(f.score)}}>{k}</b><span style={{color:tone(f.score)}}>{f.score}</span></div>
+          {(f.notes||[]).map((n,i)=><div key={i} style={{fontSize:12,color:C.d,marginTop:4}}>· {n}</div>)}
+        </div>
+      )})}
+      {sel.base?.found&&<div style={{background:C.s,borderRadius:10,padding:12,marginTop:10}}>
+        <div style={{fontSize:11,color:C.f}}>베이스</div>
+        <div style={{fontWeight:700,marginTop:4}}>손잡이 달린 컵 · {sel.base.weeks}주 · 깊이 {pct(sel.base.depth)}</div>
+        <div style={{fontSize:13,marginTop:6}}>피벗 {won(sel.base.pivot)}</div>
+      </div>}
+      <div style={{background:C.s,borderRadius:10,padding:12,marginTop:10,border:blocked?"1px solid "+C.dn:"none"}}>
+        <div style={{fontSize:11,color:C.f}}>매매 계획</div>
+        <div style={{fontWeight:700,color:blocked?C.dn:C.t,marginTop:4}}>{blocked?"신규 매수 금지":sel.trade_plan?.["상태"]}</div>
+      </div>
+    </div>
+  );
+
+  return(
+    <div style={{paddingBottom:72}}>
+      <div style={{padding:"16px 18px",paddingTop:"calc(16px + env(safe-area-inset-top))",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div><div style={{fontSize:17,fontWeight:800}}>CANSLIM 한국</div><div style={{fontSize:11,color:C.f}}>{LIVE.기준일} · 유니버스 3</div></div>
+      </div>
+
+      {tab==="analyze"&&(
+        <div style={{padding:"8px 18px"}}>
+          <div style={{fontSize:15,fontWeight:700,marginBottom:12}}>종목코드로 바로 분석</div>
+          <div style={{display:"flex",gap:8}}>
+            <input value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,""))} onKeyDown={e=>e.key==="Enter"&&analyze()} placeholder="예: 005930" style={{flex:1,background:C.s,border:"1px solid "+C.l,borderRadius:8,padding:"14px",color:C.t,fontSize:16}} inputMode="numeric" maxLength={6}/>
+            <button onClick={analyze} style={{background:C.up,border:"none",color:"#fff",borderRadius:8,padding:"0 20px",fontWeight:700}}>분석</button>
+          </div>
+          {msg&&<div style={{fontSize:13,color:C.up,marginTop:10}}>{msg}</div>}
+          {result&&(
+            <div style={{background:C.r,border:"1px solid "+C.l,borderRadius:10,padding:14,marginTop:14}} onClick={()=>setSel(result)}>
+              <div style={{display:"flex",justifyContent:"space-between"}}>
+                <div><div style={{fontSize:16,fontWeight:600}}>{result.name}</div><div style={{fontSize:11,color:C.f}}>{result.code}</div></div>
+                <div style={{textAlign:"right"}}><div style={{fontSize:20,fontWeight:700,color:tone(result.total_score)}}>{result.total_score??"—"}</div><div style={{fontSize:11,color:C.f}}>{result.grade}</div></div>
+              </div>
+              <div style={{marginTop:10,fontSize:12,color:C.d}}>{result.verdict}</div>
+              <div style={{marginTop:8,fontSize:12,color:C.f}}>탭하여 상세 보기</div>
+            </div>
+          )}
+          {!result&&(
+            <div style={{marginTop:24,fontSize:13,color:C.f,lineHeight:1.7}}>
+              <b style={{color:C.d}}>사용법</b><br/>
+              종목코드 6자리 입력 후 「분석」을 누르세요.<br/>
+              분석된 종목은 자동으로 관심목록에 추가됩니다.<br/><br/>
+              미리 로드: <b>005930</b> 삼성전자 · <b>000660</b> SK하이닉스 · <b>035420</b> NAVER
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab==="market"&&(
+        <div>
+          <div style={{background:C.s,borderTop:"3px solid "+C.dn,padding:18}}>
+            <div style={{fontSize:11,color:C.f,letterSpacing:".1em"}}>M · 시장 방향</div>
+            <div style={{fontSize:22,fontWeight:700,color:C.dn,marginTop:4}}>시장 조정</div>
+            <div style={{fontSize:14,marginTop:4}}>신규 매수 금지</div>
+            <div style={{marginTop:14,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              <div><div style={{fontSize:11,color:C.f}}>분산일</div><div style={{fontSize:18,fontWeight:700}}>7개 / 25일</div></div>
+              <div><div style={{fontSize:11,color:C.f}}>허용 비중</div><div style={{fontSize:18,fontWeight:700}}>0%</div></div>
+            </div>
+            {ms.commentary.map((c,i)=><div key={i} style={{fontSize:12,color:C.d,marginTop:6}}>· {c}</div>)}
+          </div>
+          <div style={{padding:18}}>
+            <div style={{fontSize:13,fontWeight:600,marginBottom:10}}>후보 종목</div>
+            {LIVE.종목.map(s=>(
+              <div key={s.code} style={{background:C.r,border:"1px solid "+C.l,borderRadius:10,padding:14,marginBottom:10,opacity:.55}} onClick={()=>setSel(s)}>
+                <div style={{display:"flex",justifyContent:"space-between"}}>
+                  <div><div style={{fontSize:16,fontWeight:600}}>{s.name}</div><div style={{fontSize:11,color:C.f}}>{s.code}</div></div>
+                  <div style={{textAlign:"right"}}><div style={{fontSize:18,fontWeight:700,color:tone(s.total_score)}}>{s.total_score}</div><div style={{fontSize:11,color:C.f}}>{s.grade}</div></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab==="watch"&&(
+        <div style={{padding:18}}>
+          <div style={{fontSize:15,fontWeight:700,marginBottom:12}}>관심 목록 ({watch.length})</div>
+          {watch.length===0?<div style={{textAlign:"center",color:C.f,padding:40,fontSize:13}}>관심 종목이 없습니다.<br/>분석 탭에서 코드를 입력하세요.</div>:
+          watch.map(w=>(
+            <div key={w.code} style={{background:C.r,border:"1px solid "+C.l,borderRadius:10,padding:14,marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div><div style={{fontSize:16,fontWeight:600}}>{w.name}</div><div style={{fontSize:11,color:C.f}}>{w.code} · {w.added}</div></div>
+                <button onClick={()=>remove(w.code)} style={{background:"none",border:"none",color:C.dn,fontSize:13}}>삭제</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab==="backtest"&&(
+        <div style={{padding:18}}>
+          <div style={{fontSize:15,fontWeight:700,marginBottom:8}}>임계값 백테스트</div>
+          <div style={{fontSize:13,color:C.d,lineHeight:1.6}}>현재 임계값은 오닐 원본 기준입니다. 2015~2025 한국 데이터로 최적화하는 모듈이 다음 단계입니다.</div>
+        </div>
+      )}
+
+      <div className="tabbar">
+        {[{id:"analyze",l:"분석",i:"🔍"},{id:"market",l:"시장",i:"📈"},{id:"watch",l:"관심",i:"★"},{id:"backtest",l:"백테스트",i:"⚙"}].map(t=>(
+          <button key={t.id} className={tab===t.id?"active":""} onClick={()=>{setTab(t.id);setSel(null)}}>
+            <span style={{fontSize:18}}>{t.i}</span>{t.l}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
