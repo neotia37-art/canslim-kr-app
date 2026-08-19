@@ -1,0 +1,12 @@
+streamlit>=1.40,<2.0
+pandas>=2.0,<3.0
+numpy>=1.26,<3.0
+plotly>=5.20
+pykrx>=1.0.51
+finance-datareader>=0.9.96
+requests>=2.31
+lxml>=4.9
+beautifulsoup4>=4.12
+html5lib>=1.1
+pyarrow>=14.0
+openpyxl>=3.1
